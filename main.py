@@ -17,7 +17,14 @@ emotion_labels = ('angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutr
 # Function to detect emotions from the webcam feed
 def detect_emotions(frame):
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
-    faces_detected = face_haar_cascade.detectMultiScale(gray_image)  # Detect faces
+
+    # Adjust scaleFactor and minSize to detect larger faces only
+    faces_detected = face_haar_cascade.detectMultiScale(
+        gray_image,
+        scaleFactor=1.1,  # Adjust scaleFactor: 1.1 is a good starting point
+        minNeighbors=5,   # Number of neighbors for each rectangle
+        minSize=(100, 100)  # Minimum face size (width, height)
+    )
 
     for (x, y, w, h) in faces_detected:
         cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)  # Draw rectangle around face
@@ -36,6 +43,7 @@ def detect_emotions(frame):
         cv2.putText(frame, emotion_prediction, (int(x), int(y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     return frame
+
 
 # Streamlit UI
 st.title("Real-time Emotion Detection")

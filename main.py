@@ -1,66 +1,78 @@
 import streamlit as st
 import cv2
 import numpy as np
-from tensorflow.keras.models import model_from_json
+from tensorflow.keras.models import model_from_json, load_model
 from tensorflow.keras.utils import img_to_array
-import tempfile
-import os
 
-# Load model and haarcascades
-model = model_from_json(open("model.json", "r").read())
-model.load_weights('model.weights.h5')
+# Load Haar Cascade for face detection
 face_haar_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 
 # Emotion labels
 emotion_labels = ('angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral')
 
-# Function to detect emotions from the webcam feed
-def detect_emotions(frame):
+# Function to load model
+@st.cache_resource
+def load_selected_model(model_name):
     """
-    Detect emotions from the webcam feed
-    :param frame: frame from the webcam after reading
-    :return: frame with emotions detected
+    Load the specified model
+    :param model_name: Name of the model file
+    :return: Loaded model
     """
-    gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
+    if model_name == "little_vgg":
+        model = load_model("emotion_little_vgg_3.h5")  # Load entire model in h5 format
+    else:
+        model = model_from_json(open("model.json", "r").read())
+        model.load_weights('model.weights.h5')
+    return model
 
-    # Adjust scaleFactor and minSize to detect larger faces only
+# Function to detect emotions
+def detect_emotions(frame, model):
+    """
+    Detect emotions in the frame
+    :param frame:  Frame detected by webcam
+    :param model: Model to predict emotions
+    :return: Frame with emotions detected
+    """
+    gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     faces_detected = face_haar_cascade.detectMultiScale(
-        gray_image,
-        scaleFactor=1.1,  # Adjust scaleFactor: 1.1 is a good starting point
-        minNeighbors=5,   # Number of neighbors for each rectangle
-        minSize=(100, 100)  # Minimum face size (width, height)
+        gray_image, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100)
     )
 
     for (x, y, w, h) in faces_detected:
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)  # Draw rectangle around face
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+        roi_gray = gray_image[y:y + h, x:x + w]
+        roi_gray = cv2.resize(roi_gray, (48, 48))
+        image_pixels = img_to_array(roi_gray)
+        image_pixels = np.expand_dims(image_pixels, axis=0)
 
-        roi_gray = gray_image[y:y + h, x:x + w]  # Get face area
-        roi_gray = cv2.resize(roi_gray, (48, 48))  # Resize to match model input size
-        image_pixels = img_to_array(roi_gray)  # Convert to array
-        image_pixels = np.expand_dims(image_pixels, axis=0)  # Expand dims for batch input
-
-        # Model prediction
         predictions = model.predict(image_pixels)
         max_index = np.argmax(predictions[0])
         emotion_prediction = emotion_labels[max_index]
-
-        # Add text label on the image
-        cv2.putText(frame, emotion_prediction, (int(x), int(y - 10)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(frame, emotion_prediction, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     return frame
 
-
 # Streamlit UI
 st.title("Real-time Emotion Detection")
-st.write("Click on the button below to start or stop the webcam feed.")
+st.write("Choose a model to load and start the webcam feed.")
 
-# Create a toggle button for webcam
+# Dropdown for selecting model
+model_option = st.selectbox("Select Model", ["vgg16", "little_vgg"])
+
+# Load the selected model
+try:
+    model = load_selected_model(model_option)
+    st.success(f"Loaded {model_option} model successfully!")
+except Exception as e:
+    st.error(f"Error loading {model_option}: {str(e)}")
+
+# Webcam button
 run_button = st.button("Start Webcam")
 
-# Start the webcam and process the frames
+# Webcam Stream
 if run_button:
-    cap = cv2.VideoCapture(0)  # Open webcam
-    stframe = st.empty()  # Create empty placeholder for the webcam stream
+    cap = cv2.VideoCapture(0)
+    stframe = st.empty()
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -68,21 +80,14 @@ if run_button:
             st.error("Failed to grab frame")
             break
 
-        # Emotion detection on frame
-        frame_with_emotion = detect_emotions(frame)
-
-        # Convert frame to RGB (Streamlit expects RGB)
+        frame_with_emotion = detect_emotions(frame, model)
         frame_rgb = cv2.cvtColor(frame_with_emotion, cv2.COLOR_BGR2RGB)
-
-        # Display the frame with detected emotion
         stframe.image(frame_rgb, channels="RGB", use_container_width=True)
 
-        # Stop if 'b' is pressed in the webcam window
         if cv2.waitKey(1) == ord('b'):
             break
 
-    cap.release()  # Release the webcam
+    cap.release()
 
-# Display instructions to stop the webcam
 if not run_button:
     st.write("Webcam is not active. Click 'Start Webcam' to begin.")

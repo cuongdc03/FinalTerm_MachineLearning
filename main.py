@@ -16,6 +16,11 @@ emotion_labels = ('angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutr
 
 # Function to detect emotions from the webcam feed
 def detect_emotions(frame):
+    """
+    Detect emotions from the webcam feed
+    :param frame: frame from the webcam after reading
+    :return: frame with emotions detected
+    """
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 
     # Adjust scaleFactor and minSize to detect larger faces only
